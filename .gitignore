@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Editor / IDE
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Linux kernel module build artifacts
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.order
+Module.symvers
+modules.order
+.tmp_versions/
+
+# Generated during build
+.*.cmd
