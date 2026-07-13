@@ -48,6 +48,15 @@
 #define DRIVER_DESC "Realtek RTL8152/RTL8153 Based USB Ethernet Adapters"
 #define MODULENAME "r8152"
 
+static bool s5_wol;
+module_param(s5_wol, bool, 0444);
+MODULE_PARM_DESC(s5_wol, "Enable S5 Wake-on-LAN support (default: 0)");
+
+static bool ctap_short = true;
+module_param(ctap_short, bool, 0444);
+MODULE_PARM_DESC(ctap_short,
+		 "Enable center tap short detection (default: 1)");
+
 #define PATENTS		"This product is covered by one or more of the " \
 			"following patents:\n" \
 			"\t\tUS6,570,884, US6,115,776, and US6,327,625.\n"
@@ -1015,9 +1024,10 @@ struct r8152 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23) && defined(CONFIG_PM_SLEEP)
 	struct notifier_block pm_notifier;
 #endif
-#if defined(RTL8152_S5_WOL) && defined(CONFIG_PM)
+#ifdef CONFIG_PM
 	struct notifier_block reboot_notifier;
-#endif /* defined(RTL8152_S5_WOL) && defined(CONFIG_PM) */
+	bool reboot_notifier_registered;
+#endif /* CONFIG_PM */
 	struct tasklet_struct tx_tl;
 
 	struct rtl_ops {
@@ -11159,11 +11169,13 @@ static void r8153b_hw_phy_cfg(struct r8152 *tp)
 
 	ocp_word_set_bits(tp, MCU_TYPE_PLA, PLA_PHY_PWR, PFM_PWM_SWITCH);
 
-#ifdef CONFIG_CTAP_SHORT_OFF
-	ocp_reg_clr_bits(tp, OCP_EEE_CFG, CTAP_SHORT_EN);
-
-	tp->ups_info.ctap_short_off = true;
-#endif
+	if (ctap_short) {
+		ocp_reg_set_bits(tp, OCP_EEE_CFG, CTAP_SHORT_EN);
+		tp->ups_info.ctap_short_off = false;
+	} else {
+		ocp_reg_clr_bits(tp, OCP_EEE_CFG, CTAP_SHORT_EN);
+		tp->ups_info.ctap_short_off = true;
+	}
 	/* Advnace EEE */
 	if (!rtl_phy_patch_request(tp, true, true)) {
 		ocp_reg_set_bits(tp, OCP_POWER_CFG, EEE_CLKDIV_EN);
@@ -13009,7 +13021,7 @@ static int rtl_notifier(struct notifier_block *nb, unsigned long action,
 }
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23) && defined(CONFIG_PM_SLEEP) */
 
-#if defined(RTL8152_S5_WOL) && defined(CONFIG_PM)
+#ifdef CONFIG_PM
 static int rtl_s5_wol(struct r8152 *tp)
 {
 	struct usb_device *udev = tp->udev;
@@ -13106,7 +13118,7 @@ int rtl_reboot_notifier(struct notifier_block *nb, unsigned long action,
 
 	return NOTIFY_DONE;
 }
-#endif /* defined(RTL8152_S5_WOL) && defined(CONFIG_PM) */
+#endif /* CONFIG_PM */
 
 static int rtk_disable_diag(struct r8152 *tp)
 {
@@ -13182,10 +13194,20 @@ static int rtl8152_open(struct net_device *netdev)
 	tp->pm_notifier.notifier_call = rtl_notifier;
 	register_pm_notifier(&tp->pm_notifier);
 #endif
-#if defined(RTL8152_S5_WOL) && defined(CONFIG_PM)
-	tp->reboot_notifier.notifier_call = rtl_reboot_notifier;
-	register_reboot_notifier(&tp->reboot_notifier);
-#endif /* defined(RTL8152_S5_WOL) && defined(CONFIG_PM) */
+#ifdef CONFIG_PM
+	if (s5_wol) {
+		int ret;
+
+		tp->reboot_notifier.notifier_call = rtl_reboot_notifier;
+		ret = register_reboot_notifier(&tp->reboot_notifier);
+		if (ret)
+			netif_warn(tp, drv, tp->netdev,
+				   "failed to register S5 WOL notifier: %d\n",
+				   ret);
+		else
+			tp->reboot_notifier_registered = true;
+	}
+#endif /* CONFIG_PM */
 	return 0;
 
 out_unwork:
@@ -13204,9 +13226,12 @@ static int rtl8152_close(struct net_device *netdev)
 	struct r8152 *tp = netdev_priv(netdev);
 	int res = 0;
 
-#if defined(RTL8152_S5_WOL) && defined(CONFIG_PM)
-	unregister_reboot_notifier(&tp->reboot_notifier);
-#endif /* defined(RTL8152_S5_WOL) && defined(CONFIG_PM) */
+#ifdef CONFIG_PM
+	if (tp->reboot_notifier_registered) {
+		unregister_reboot_notifier(&tp->reboot_notifier);
+		tp->reboot_notifier_registered = false;
+	}
+#endif /* CONFIG_PM */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23) && defined(CONFIG_PM_SLEEP)
 	unregister_pm_notifier(&tp->pm_notifier);
 #endif
@@ -13233,13 +13258,16 @@ static int rtl8152_close(struct net_device *netdev)
 
 		tp->rtl_ops.down(tp);
 
-#if defined(RTL8152_S5_WOL) && defined(CONFIG_PM)
-		if (rtl_s5_wol(tp) < 0)
-			netif_info(tp, drv, tp->netdev,
-				   "S5 WOL is not enabled\n");
-		else
-			netif_info(tp, drv, tp->netdev, "Enable S5 WOL\n");
-#endif /* defined(RTL8152_S5_WOL) && defined(CONFIG_PM) */
+#ifdef CONFIG_PM
+		if (s5_wol) {
+			if (rtl_s5_wol(tp) < 0)
+				netif_info(tp, drv, tp->netdev,
+					   "S5 WOL is not enabled\n");
+			else
+				netif_info(tp, drv, tp->netdev,
+					   "Enable S5 WOL\n");
+		}
+#endif /* CONFIG_PM */
 
 		if (tp->version == RTL_VER_01)
 			rtl8152_set_speed(tp, AUTONEG_ENABLE, 0, 0, 3);

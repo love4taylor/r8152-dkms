@@ -11,9 +11,9 @@
 #include <linux/acpi.h>
 #include <linux/compat.h>
 
-#if defined(RTL8152_S5_WOL) && defined(CONFIG_PM)
+#ifdef CONFIG_PM
 #include <linux/reboot.h>
-#endif /* defined(RTL8152_S5_WOL) && defined(CONFIG_PM) */
+#endif /* CONFIG_PM */
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
 	#include <linux/mdio.h>
