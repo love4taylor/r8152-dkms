@@ -53,7 +53,8 @@ module-parameter, udev, and documentation behavior.
 | <code>packaging/arch/PKGBUILD</code> | Arch Linux package recipe |
 | <code>packaging/check-versions.sh</code> | Package version consistency check |
 | <code>packaging/build-apt-repository.sh</code> | Signed APT repository generator |
-| <code>packaging/apt/</code> | Cloudflare Pages repository assets |
+| <code>packaging/apt/</code> | Cloudflare Workers repository assets |
+| <code>wrangler.jsonc</code> | Cloudflare Worker deployment configuration |
 | <code>README.md</code> | English documentation |
 | <code>README.zh.md</code> | Simplified Chinese documentation |
 | <code>LICENSE</code> | Verbatim GPLv2 license text |
@@ -144,14 +145,14 @@ sudo modprobe r8152 s5_wol=1 ctap_short=0
   <code>any</code>.
 - Keep APT repository metadata signed with the dedicated GPG archive key.
 - Store the private signing key only in GitHub Actions Secrets; never commit it
-  or deploy it to Cloudflare Pages.
+  or deploy it to Cloudflare Workers.
 - Keep <code>InRelease</code>, <code>Release</code>, and package indexes in the
-  Pages output. Do not publish an unsigned APT repository.
-- Rebuild the repository from GitHub Release assets so a fresh Pages deployment
-  does not depend on files from an earlier deployment.
-- The default Pages project is <code>r8152-apt</code> with production branch
-  <code>master</code>. Override the project with the
-  <code>CLOUDFLARE_PAGES_PROJECT</code> repository variable.
+  Workers static-asset output. Do not publish an unsigned APT repository.
+- Rebuild the repository from GitHub Release assets so each Worker deployment
+  is self-contained and does not depend on files from an earlier deployment.
+- Deploy the Worker named <code>r8152-apt</code> from <code>wrangler.jsonc</code>
+  with <code>workers_dev</code> disabled. Configure a custom domain or route in
+  Cloudflare before deploying it to production.
 - Required Actions secrets are <code>CLOUDFLARE_API_TOKEN</code>,
   <code>CLOUDFLARE_ACCOUNT_ID</code>, <code>APT_REPO_PRIVATE_KEY</code>, and
   <code>APT_REPO_SIGNING_KEY_ID</code>. The optional
@@ -163,7 +164,7 @@ sudo modprobe r8152 s5_wol=1 ctap_short=0
   <code>gpg --list-secret-keys --fingerprint --with-subkey-fingerprint</code>;
   <code>--keyid-format=full</code> is not a valid GnuPG option.
 - Keep README content user-facing. Do not document CI triggers, matrix details,
-  signing-key setup, Cloudflare credentials, or Pages deployment internals in
+  signing-key setup, Cloudflare credentials, or Workers deployment internals in
   the user READMEs. Add client APT instructions only after a real repository
   domain is available.
 - The current repository publishes binary packages only. Add source-package

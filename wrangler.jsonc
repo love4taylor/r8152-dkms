@@ -1,0 +1,8 @@
+{
+  "name": "r8152-apt",
+  "compatibility_date": "2026-07-15",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./apt-repo"
+  }
+}

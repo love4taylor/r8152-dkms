@@ -153,9 +153,9 @@ jobs:
             apt-repo \
             "$APT_REPO_SIGNING_KEY_ID"
 
-      - name: Deploy APT repository to Cloudflare Pages
+      - name: Deploy APT repository to Cloudflare Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apt-repo --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'r8152-apt' }} --branch=master
+          command: deploy

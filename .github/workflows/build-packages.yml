@@ -15,6 +15,7 @@ on:
     paths:
       - ".github/workflows/build-packages.yml"
       - ".github/workflows/release-packages.yml"
+      - "wrangler.jsonc"
       - "r8152.c"
       - "compatibility.h"
       - "Makefile"
@@ -28,6 +29,7 @@ on:
     paths:
       - ".github/workflows/build-packages.yml"
       - ".github/workflows/release-packages.yml"
+      - "wrangler.jsonc"
       - "r8152.c"
       - "compatibility.h"
       - "Makefile"

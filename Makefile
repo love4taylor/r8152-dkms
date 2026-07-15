@@ -20,7 +20,6 @@ else
 	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 	PWD :=$(shell pwd)
 	TARGET_PATH := kernel/drivers/net/usb
-	INBOXDRIVER := $(shell find $(subst build,$(TARGET_PATH),$(KERNELDIR)) -name r8152.ko.* -type f)
 
 .PHONY: modules all clean install install_rules uninstall_rules \
 	dkms-source dkms-add dkms-build dkms-install dkms-uninstall
@@ -40,9 +39,10 @@ endif
 ifneq ($(shell lsmod | grep r8152),)
 	rmmod r8152
 endif
-ifneq ($(INBOXDRIVER),)
-	rm -f $(INBOXDRIVER)
-endif
+	if [ -d "$(subst build,$(TARGET_PATH),$(KERNELDIR))" ]; then \
+		find "$(subst build,$(TARGET_PATH),$(KERNELDIR))" \
+			-name 'r8152.ko.*' -type f -exec rm -f {} +; \
+	fi
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) INSTALL_MOD_DIR=$(TARGET_PATH) modules_install
 	$(MAKE) install_rules
 	modprobe r8152
