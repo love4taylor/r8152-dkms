@@ -150,7 +150,7 @@ sudo modprobe r8152 s5_wol=1 ctap_short=0
   Workers static-asset output. Do not publish an unsigned APT repository.
 - Rebuild the repository from GitHub Release assets so each Worker deployment
   is self-contained and does not depend on files from an earlier deployment.
-- Deploy the Worker named <code>r8152-apt</code> from <code>wrangler.jsonc</code>
+- Deploy the Worker named <code>r8152</code> from <code>wrangler.jsonc</code>
   with <code>workers_dev</code> disabled. Configure a custom domain or route in
   Cloudflare before deploying it to production.
 - Required Actions secrets are <code>CLOUDFLARE_API_TOKEN</code>,
