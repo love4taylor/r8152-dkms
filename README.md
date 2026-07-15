@@ -34,7 +34,30 @@ continuing.
 
 ## Installation
 
-### DKMS installation (recommended)
+### APT repository (recommended)
+
+Debian and Ubuntu users can install the universal package from the project's
+signed APT repository:
+
+~~~bash
+sudo apt update
+sudo apt install --yes ca-certificates curl
+sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://r8152.deb.love4taylor.com/keyrings/r8152-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/r8152-archive-keyring.gpg >/dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/r8152-archive-keyring.gpg] https://r8152.deb.love4taylor.com any main" \
+  | sudo tee /etc/apt/sources.list.d/r8152.list
+
+sudo apt update
+sudo apt install linux-headers-$(uname -r) r8152-dkms
+~~~
+
+The repository uses the generic <code>any</code> suite instead of a Debian or
+Ubuntu release codename. The package contains DKMS source rather than a
+prebuilt <code>.ko</code>; DKMS compiles the module for the installed kernel.
+
+### DKMS installation from source
 
 Run the complete DKMS installation workflow from the project directory:
 

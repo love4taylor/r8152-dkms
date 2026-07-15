@@ -36,7 +36,29 @@ Make，以及与当前运行内核匹配的头文件。
 
 ## 安装
 
-### DKMS 安装（推荐）
+### APT 软件源（推荐）
+
+Debian 和 Ubuntu 用户可以从项目的签名 APT 软件源安装通用软件包：
+
+```bash
+sudo apt update
+sudo apt install --yes ca-certificates curl
+sudo install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://r8152.deb.love4taylor.com/keyrings/r8152-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/r8152-archive-keyring.gpg >/dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/r8152-archive-keyring.gpg] https://r8152.deb.love4taylor.com any main" \
+  | sudo tee /etc/apt/sources.list.d/r8152.list
+
+sudo apt update
+sudo apt install linux-headers-$(uname -r) r8152-dkms
+```
+
+该软件源使用通用的 <code>any</code> suite，不依赖 Debian 或 Ubuntu 的
+发行版代号。软件包包含 DKMS 源码而不是预编译的 <code>.ko</code>；DKMS
+会为已安装的内核编译模块。
+
+### 从源码安装 DKMS
 
 在项目目录中执行完整的 DKMS 安装流程：
 
