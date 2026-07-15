@@ -47,6 +47,13 @@ module-parameter, udev, and documentation behavior.
 | <code>dkms.conf</code> | DKMS package metadata and build command |
 | <code>dkms-install-rules</code> | DKMS post-install udev rule hook |
 | <code>50-usb-realtek-net.rules</code> | Realtek USB configuration rule |
+| <code>.github/workflows/build-packages.yml</code> | Reusable package validation, module compilation, and package builds |
+| <code>.github/workflows/release-packages.yml</code> | Version-tag Release and APT repository publishing |
+| <code>debian/</code> | Debian and Ubuntu package metadata |
+| <code>packaging/arch/PKGBUILD</code> | Arch Linux package recipe |
+| <code>packaging/check-versions.sh</code> | Package version consistency check |
+| <code>packaging/build-apt-repository.sh</code> | Signed APT repository generator |
+| <code>packaging/apt/</code> | Cloudflare Pages repository assets |
 | <code>README.md</code> | English documentation |
 | <code>README.zh.md</code> | Simplified Chinese documentation |
 | <code>LICENSE</code> | Verbatim GPLv2 license text |
@@ -91,6 +98,8 @@ sudo modprobe r8152 s5_wol=1 ctap_short=0
   - <code>DRIVER_VERSION</code> in <code>r8152.c</code>
   - <code>DKMS_VERSION</code> in <code>Makefile</code>
   - <code>PACKAGE_VERSION</code> in <code>dkms.conf</code>
+  - The upstream version in <code>debian/changelog</code>
+  - <code>pkgver</code> in <code>packaging/arch/PKGBUILD</code>
 - Update the DKMS source-file list whenever a required build, hook, rule,
   license, or documentation file is renamed or added.
 - Keep both <code>README.md</code> and <code>README.zh.md</code> in the DKMS
@@ -107,6 +116,59 @@ sudo modprobe r8152 s5_wol=1 ctap_short=0
   an older DKMS release that requires it.
 - Keep <code>dkms-uninstall</code> limited to known package files. Do not
   replace its guarded cleanup with an unrestricted recursive removal.
+
+## CI and Release Workflows
+
+- Keep ordinary pushes and pull requests on
+  <code>.github/workflows/build-packages.yml</code>. They must validate and build
+  without uploading package artifacts.
+- Keep Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 module compilation
+  in one matrix job rather than duplicating workflows by distribution.
+- Keep package upload controlled by the reusable workflow's
+  <code>upload_artifacts</code> input. Only the version-tag Release workflow
+  should enable it.
+- Keep <code>.github/workflows/release-packages.yml</code> limited to
+  <code>v*</code> tags. It must call the reusable build workflow instead of
+  duplicating validation, module compilation, or package builds.
+- Keep GitHub Release write permission and APT signing or Cloudflare secrets out
+  of the ordinary build workflow.
+
+## APT Repository Publishing
+
+- Build the APT repository only from packages published by the version-tag
+  Release workflow.
+- Publish the universal Debian package to the generic <code>any</code> APT
+  suite; do not encode an operating-system codename in its package version.
+- Keep the repository generator independent of Debian and Ubuntu release
+  codenames and import every published universal Debian package into
+  <code>any</code>.
+- Keep APT repository metadata signed with the dedicated GPG archive key.
+- Store the private signing key only in GitHub Actions Secrets; never commit it
+  or deploy it to Cloudflare Pages.
+- Keep <code>InRelease</code>, <code>Release</code>, and package indexes in the
+  Pages output. Do not publish an unsigned APT repository.
+- Rebuild the repository from GitHub Release assets so a fresh Pages deployment
+  does not depend on files from an earlier deployment.
+- The default Pages project is <code>r8152-apt</code> with production branch
+  <code>master</code>. Override the project with the
+  <code>CLOUDFLARE_PAGES_PROJECT</code> repository variable.
+- Required Actions secrets are <code>CLOUDFLARE_API_TOKEN</code>,
+  <code>CLOUDFLARE_ACCOUNT_ID</code>, <code>APT_REPO_PRIVATE_KEY</code>, and
+  <code>APT_REPO_SIGNING_KEY_ID</code>. The optional
+  <code>APT_REPO_GPG_PASSPHRASE</code> secret unlocks a protected signing key.
+- The repository suite is <code>any</code>; the optional
+  <code>APT_REPOSITORY_ARCHITECTURES</code> repository variable defaults to
+  <code>amd64 arm64 armhf</code>.
+- Obtain the full signing-key fingerprint with
+  <code>gpg --list-secret-keys --fingerprint --with-subkey-fingerprint</code>;
+  <code>--keyid-format=full</code> is not a valid GnuPG option.
+- Keep README content user-facing. Do not document CI triggers, matrix details,
+  signing-key setup, Cloudflare credentials, or Pages deployment internals in
+  the user READMEs. Add client APT instructions only after a real repository
+  domain is available.
+- The current repository publishes binary packages only. Add source-package
+  metadata and <code>deb-src</code> indexes only when <code>.dsc</code> and source
+  archive artifacts are added to the build workflow.
 
 ## Documentation
 
@@ -187,6 +249,19 @@ For DKMS or hook changes:
 bash -n dkms.conf
 sh -n dkms-install-rules
 make -n dkms-source DKMS_SOURCE_DIR=/tmp/r8152-dkms-source
+~~~
+
+For distribution package changes:
+
+~~~bash
+sh -n packaging/check-versions.sh
+packaging/check-versions.sh
+~~~
+
+For APT repository changes:
+
+~~~bash
+bash -n packaging/build-apt-repository.sh
 ~~~
 
 For README changes:

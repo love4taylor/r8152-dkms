@@ -1,0 +1,160 @@
+name: Release distribution packages
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and test packages
+    uses: ./.github/workflows/build-packages.yml
+    with:
+      upload_artifacts: true
+    permissions:
+      contents: read
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: r8152-dkms-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify release assets
+        run: |
+          set -euo pipefail
+          deb_count="$(find dist -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ')"
+          arch_count="$(find dist -maxdepth 1 -type f -name '*.pkg.tar.zst' | wc -l | tr -d ' ')"
+          test "$deb_count" -eq 1
+          test "$arch_count" -eq 1
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* \
+              --verify-tag \
+              --generate-notes \
+              --title "$tag"
+          fi
+
+  apt:
+    name: Publish APT repository
+    needs:
+      - build
+      - release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download current Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: r8152-dkms-debian
+          path: apt-packages
+
+      - name: Collect released Debian packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          current_packages=(apt-packages/*.deb)
+          test "${#current_packages[@]}" -eq 1
+
+          while IFS= read -r tag; do
+            asset_count="$(gh release view "$tag" --json assets \
+              --jq '[.assets[].name | select(endswith("_all.deb"))] | length')"
+            if [ "$asset_count" -gt 0 ]; then
+              gh release download "$tag" \
+                --pattern '*_all.deb' \
+                --dir apt-packages \
+                --skip-existing
+            fi
+          done < <(gh release list --limit 1000 --json tagName --jq '.[].tagName')
+
+          package_count="$(find apt-packages -maxdepth 1 -type f -name '*.deb' \
+            | wc -l | tr -d ' ')"
+          test "$package_count" -ge 1
+
+      - name: Install APT repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            gnupg \
+            gpg-agent \
+            reprepro
+
+      - name: Build signed APT repository
+        env:
+          APT_REPO_PRIVATE_KEY: ${{ secrets.APT_REPO_PRIVATE_KEY }}
+          APT_REPO_GPG_PASSPHRASE: ${{ secrets.APT_REPO_GPG_PASSPHRASE }}
+          APT_REPO_SIGNING_KEY_ID: ${{ secrets.APT_REPO_SIGNING_KEY_ID }}
+          APT_REPOSITORY_ARCHITECTURES: ${{ vars.APT_REPOSITORY_ARCHITECTURES || 'amd64 arm64 armhf' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$APT_REPO_PRIVATE_KEY"
+          test -n "$APT_REPO_SIGNING_KEY_ID"
+          export GNUPGHOME="$RUNNER_TEMP/apt-gnupg"
+          install -d -m 0700 "$GNUPGHOME"
+          printf '%s' "$APT_REPO_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --list-secret-keys "$APT_REPO_SIGNING_KEY_ID"
+          if [ -n "$APT_REPO_GPG_PASSPHRASE" ]; then
+            echo allow-preset-passphrase > "$GNUPGHOME/gpg-agent.conf"
+            gpgconf --kill gpg-agent || true
+            gpgconf --launch gpg-agent
+            preset_passphrase="$(command -v gpg-preset-passphrase || \
+              find /usr/lib -type f -name gpg-preset-passphrase -print -quit)"
+            test -n "$preset_passphrase"
+            keygrips="$(gpg --with-colons --with-keygrip \
+              --list-secret-keys "$APT_REPO_SIGNING_KEY_ID" \
+              | awk -F: '$1 == "grp" { print $10 }')"
+            test -n "$keygrips"
+            while IFS= read -r keygrip; do
+              "$preset_passphrase" --preset \
+                --passphrase "$APT_REPO_GPG_PASSPHRASE" "$keygrip"
+            done <<< "$keygrips"
+          fi
+          printf 'r8152 APT repository signing check\n' \
+            > "$RUNNER_TEMP/apt-signing-check"
+          gpg --batch --yes \
+            --local-user "$APT_REPO_SIGNING_KEY_ID" \
+            --detach-sign \
+            --output "$RUNNER_TEMP/apt-signing-check.sig" \
+            "$RUNNER_TEMP/apt-signing-check"
+          packaging/build-apt-repository.sh \
+            apt-packages \
+            apt-repo \
+            "$APT_REPO_SIGNING_KEY_ID"
+
+      - name: Deploy APT repository to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apt-repo --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'r8152-apt' }} --branch=master

@@ -1,0 +1,23 @@
+pkgname=r8152-dkms
+pkgver=2.22.1
+pkgrel=1
+pkgdesc="Realtek r8152 USB Ethernet driver in DKMS format"
+arch=('any')
+url="https://github.com/love4taylor/r8152-dkms"
+license=('GPL-2.0-only')
+depends=('dkms' 'make')
+source=("r8152-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+	local source_dir="$srcdir/r8152-$pkgver"
+
+	make -C "$source_dir" dkms-source \
+		DKMS_SOURCE_DIR="$pkgdir/usr/src/r8152-$pkgver"
+	install -Dm644 "$source_dir/LICENSE" \
+		"$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+	install -Dm644 "$source_dir/README.md" \
+		"$pkgdir/usr/share/doc/$pkgname/README.md"
+	install -Dm644 "$source_dir/README.zh.md" \
+		"$pkgdir/usr/share/doc/$pkgname/README.zh.md"
+}

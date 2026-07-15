@@ -58,6 +58,24 @@ dkms status -m r8152 -v 2.22.1
 modinfo r8152
 ~~~
 
+### Distribution packages
+
+Download the appropriate package from GitHub Releases:
+
+| Release asset | Build environment | Package format |
+| --- | --- | --- |
+| <code>r8152-dkms_2.22.1-1_all.deb</code> | Debian and Ubuntu | <code>.deb</code> |
+| <code>r8152-dkms-2.22.1-1-any.pkg.tar.zst</code> | Current Arch Linux | <code>.pkg.tar.zst</code> |
+
+~~~bash
+sudo apt install ./r8152-dkms_2.22.1-1_all.deb
+sudo pacman -U ./r8152-dkms-2.22.1-1-any.pkg.tar.zst
+~~~
+
+These are DKMS source packages rather than kernel-specific prebuilt modules.
+Install the headers for the target kernel first; DKMS compiles and installs
+<code>r8152.ko</code> on the destination system.
+
 ### Manual installation
 
 Build and install the module without registering it with DKMS:
@@ -303,6 +321,8 @@ make modules KERNELDIR=/lib/modules/<kernel-version>/build
 | <code>dkms.conf</code> | DKMS package configuration |
 | <code>dkms-install-rules</code> | DKMS post-install hook for the udev rule |
 | <code>50-usb-realtek-net.rules</code> | USB device configuration rule |
+| <code>debian/</code> | Debian and Ubuntu package metadata |
+| <code>packaging/arch/PKGBUILD</code> | Arch Linux package recipe |
 | <code>README.md</code> | English documentation |
 | <code>README.zh.md</code> | Simplified Chinese documentation |
 | <code>LICENSE</code> | GNU General Public License version 2 text |

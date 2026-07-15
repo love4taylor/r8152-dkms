@@ -1,0 +1,18 @@
+Source: r8152-dkms
+Section: kernel
+Priority: optional
+Maintainer: love4taylor <i@love4taylor.com>
+Build-Depends: debhelper-compat (= 13), dkms
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/love4taylor/r8152-dkms
+Vcs-Browser: https://github.com/love4taylor/r8152-dkms
+Vcs-Git: https://github.com/love4taylor/r8152-dkms.git
+
+Package: r8152-dkms
+Architecture: all
+Depends: make, ${misc:Depends}
+Description: Realtek r8152 USB Ethernet driver in DKMS format
+ This package provides the Realtek r8152 out-of-tree USB Ethernet driver
+ source for DKMS. DKMS rebuilds the module when compatible kernels are
+ installed or upgraded.

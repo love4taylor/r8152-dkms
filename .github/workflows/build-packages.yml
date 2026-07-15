@@ -1,0 +1,198 @@
+name: Build and test distribution packages
+
+on:
+  workflow_call:
+    inputs:
+      upload_artifacts:
+        description: Upload packages for a release workflow
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/build-packages.yml"
+      - ".github/workflows/release-packages.yml"
+      - "r8152.c"
+      - "compatibility.h"
+      - "Makefile"
+      - "dkms.conf"
+      - "dkms-install-rules"
+      - "50-usb-realtek-net.rules"
+      - "LICENSE"
+      - "debian/**"
+      - "packaging/**"
+  pull_request:
+    paths:
+      - ".github/workflows/build-packages.yml"
+      - ".github/workflows/release-packages.yml"
+      - "r8152.c"
+      - "compatibility.h"
+      - "Makefile"
+      - "dkms.conf"
+      - "dkms-install-rules"
+      - "50-usb-realtek-net.rules"
+      - "LICENSE"
+      - "debian/**"
+      - "packaging/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate package metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run static checks
+        run: |
+          packaging/check-versions.sh
+          bash -n packaging/build-apt-repository.sh
+          bash -n dkms.conf
+          bash -n packaging/arch/PKGBUILD
+          sh -n dkms-install-rules
+          sh -n packaging/check-versions.sh
+          make -n dkms-source DKMS_SOURCE_DIR=/tmp/r8152-dkms-source
+          git diff --check
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          expected_tag="v$(sed -n 's/^DKMS_VERSION ?= //p' Makefile)"
+          test "$GITHUB_REF_NAME" = "$expected_tag"
+
+  module:
+    name: Compile module (${{ matrix.name }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian 12
+            image: debian:12-slim
+            headers_package: linux-headers-amd64
+            headers_glob: linux-headers-*-amd64
+          - name: Debian 13
+            image: debian:13-slim
+            headers_package: linux-headers-amd64
+            headers_glob: linux-headers-*-amd64
+          - name: Ubuntu 24.04
+            image: ubuntu:24.04
+            headers_package: linux-headers-generic
+            headers_glob: linux-headers-*-generic
+          - name: Ubuntu 26.04
+            image: ubuntu:26.04
+            headers_package: linux-headers-generic
+            headers_glob: linux-headers-*-generic
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            git \
+            kmod \
+            ${{ matrix.headers_package }}
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile and inspect module
+        shell: bash
+        run: |
+          set -euo pipefail
+          kernel_dir="$(find /usr/src -mindepth 1 -maxdepth 1 -type d \
+            -name '${{ matrix.headers_glob }}' | sort -V | tail -n 1)"
+          test -n "$kernel_dir"
+          make modules KERNELDIR="$kernel_dir"
+          modinfo ./r8152.ko
+          modinfo -p ./r8152.ko | grep -q '^s5_wol:'
+          modinfo -p ./r8152.ko | grep -q '^ctap_short:'
+          make clean KERNELDIR="$kernel_dir"
+
+  debian:
+    name: Build universal Debian package
+    needs: validate
+    runs-on: ubuntu-latest
+    container: debian:13-slim
+    steps:
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            debhelper \
+            dkms \
+            git
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build universal Debian package
+        run: dpkg-buildpackage --build=binary --no-sign
+
+      - name: Upload universal Debian package
+        if: inputs.upload_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8152-dkms-debian
+          path: ${{ github.workspace }}/../r8152-dkms_*_all.deb
+          if-no-files-found: error
+          retention-days: 1
+
+  archlinux:
+    name: Build Arch Linux package
+    needs: validate
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm --needed git
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Arch Linux source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^DKMS_VERSION ?= //p' Makefile)"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git archive --format=tar --prefix="r8152-${version}/" HEAD \
+            | gzip -n -9 > "packaging/arch/r8152-${version}.tar.gz"
+
+      - name: Build Arch Linux package
+        shell: bash
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- bash -c \
+            'cd "$1" && makepkg --cleanbuild --clean --noconfirm' \
+            _ "$GITHUB_WORKSPACE/packaging/arch"
+
+      - name: Upload Arch Linux package
+        if: inputs.upload_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8152-dkms-archlinux
+          path: packaging/arch/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 1
