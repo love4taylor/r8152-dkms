@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run static checks
         run: |
@@ -110,7 +110,7 @@ jobs:
             ${{ matrix.headers_package }}
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Compile and inspect module
         shell: bash
@@ -145,17 +145,27 @@ jobs:
             git
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build universal Debian package
         run: dpkg-buildpackage --build=binary --no-sign
 
+      - name: Locate universal Debian package
+        id: debian_package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="$(find "$(dirname "$GITHUB_WORKSPACE")" -maxdepth 1 \
+            -type f -name 'r8152-dkms_*_all.deb' -print -quit)"
+          test -n "$package"
+          printf 'path=%s\n' "$package" >> "$GITHUB_OUTPUT"
+
       - name: Upload universal Debian package
         if: inputs.upload_artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: r8152-dkms-debian
-          path: ${{ github.workspace }}/../r8152-dkms_*_all.deb
+          path: ${{ steps.debian_package.outputs.path }}
           if-no-files-found: error
           retention-days: 1
 
@@ -169,7 +179,7 @@ jobs:
         run: pacman -Syu --noconfirm --needed dkms git
 
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Prepare Arch Linux source archive
         shell: bash
@@ -191,7 +201,7 @@ jobs:
 
       - name: Upload Arch Linux package
         if: inputs.upload_artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: r8152-dkms-archlinux
           path: packaging/arch/*.pkg.tar.zst
