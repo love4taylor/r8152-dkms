@@ -140,6 +140,7 @@ jobs:
             build-essential \
             ca-certificates \
             debhelper \
+            dh-dkms \
             dkms \
             git
 
@@ -165,7 +166,7 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed git
+        run: pacman -Syu --noconfirm --needed dkms git
 
       - name: Check out repository
         uses: actions/checkout@v4
